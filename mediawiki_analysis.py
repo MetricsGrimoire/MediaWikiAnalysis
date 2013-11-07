@@ -28,11 +28,8 @@ from optparse import OptionParser
 import os, sys
 import MySQLdb
 from datetime import datetime
-import urllib2
-from xml.dom.minidom import parse, parseString
-
-
-
+import urllib2, urllib
+from xml.dom.minidom import parseString
 
 def read_file(filename):
     fd = open(filename, "r")
@@ -198,16 +195,28 @@ if __name__ == '__main__':
         pages_list = pages_list_orig.strip('\n')
     else:
         pages_list = pages.read().strip('\n')
-    import pprint
-    pprint.pprint(pages_list)
-    pprint.pprint(parseString(pages_list))
-    sys.exit(0)
+    xmlpages = parseString(pages_list)
+    for page in xmlpages.getElementsByTagName('p'):
+        # TODO: we can join several title pages here
+        urltitle = urllib.urlencode({'titles':page.attributes['title'].value})
+        page_allrevs_query = "action=query&prop=revisions&"+urltitle+"&rvlimit=500&format=xml"
+        pageid = page.attributes['pageid'].value
+        print(api_url+"?"+page_allrevs_query)
+        page_revs = urllib2.urlopen(api_url+"?"+page_allrevs_query)
+        page_revs_list = page_revs.read().strip('\n')
+        xmlrevs = parseString(page_revs_list)
+        for rev in xmlrevs.getElementsByTagName('rev'):
+            revid = rev.attributes['revid'].value
+            user = rev.attributes['user'].value
+            timestamp = rev.attributes['timestamp'].value
+            comment = rev.attributes['comment'].value
+            print (revid+" "+user+" "+timestamp+" "+comment)
 
     files = os.listdir(opts.data_dir)
     for logfile in files:
         year = logfile[0:4]
         month = logfile[4:6]
-        day = logfile[6:8]    
+        day = logfile[6:8]
         date = year + "-" + month + "-" + day
         try:
             date_test = datetime.strptime(date, '%Y-%m-%d')
