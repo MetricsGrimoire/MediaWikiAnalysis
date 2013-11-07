@@ -28,6 +28,10 @@ from optparse import OptionParser
 import os, sys
 import MySQLdb
 from datetime import datetime
+import urllib2
+import urlparse
+import xml.sax.handler
+
 
 
 def read_file(filename):
@@ -185,11 +189,15 @@ if __name__ == '__main__':
     # http://openstack.redhat.com/api.php?action=query&list=allpages&aplimit=500
     api_url = opts.url + "/" + "api.php"
     print("API URL: " + api_url)
-    sys.exit(0)
-    
+
     # Read all WikiMedia pages and the analyze all revisions
-    allpages_query = "http://openstack.redhat.com/api.php?action=query&list=allpages&aplimit=500"
-    
+    allpages_query = "action=query&list=allpages&aplimit=500&format=xml"
+    pages = urllib2.urlopen(api_url+"?"+allpages_query)
+    pages_list = pages.read()
+    import pprint
+    pprint.pprint(pages_list)
+    sys.exit(0)
+
     files = os.listdir(opts.data_dir)
     for logfile in files:
         year = logfile[0:4]
