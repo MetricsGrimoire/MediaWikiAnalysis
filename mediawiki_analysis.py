@@ -135,6 +135,38 @@ def create_tables(cursor, con):
            ") ENGINE=MyISAM DEFAULT CHARSET=utf8"
     cursor.execute(query)
     return
+    
+def process_revisions(cursor, pageid, xmlrevs):
+    for rev in xmlrevs.getElementsByTagName('rev'):
+        # count_revs += 1
+        revid = rev.attributes['revid'].value
+        user = rev.attributes['user'].value
+        timestamp = rev.attributes['timestamp'].value
+        comment = rev.attributes['comment'].value
+        if (opts.debug): print (pageid +" " + revid+" "+user+" "+timestamp+" "+comment)
+        insert_revision (cursor, pageid, revid, user, timestamp, comment)
+        # if (count_revs % 1000 == 0): print (count_revs)
+
+def process_pages(cursor, xmlpages):
+    apcontinue = None
+    for entry in xmlpages.getElementsByTagName('allpages'):
+        if entry.hasAttribute('apcontinue'):
+            apcontinue = entry.attributes['apcontinue'].value
+            if (opts.debug): print("Continue from:"+apcontinue)
+            break
+    for page in xmlpages.getElementsByTagName('p'):
+        # TODO: we can join several title pages here
+        title = page.attributes['title'].value
+        urltitle = urllib.urlencode({'titles':title})
+        page_allrevs_query = "action=query&prop=revisions&"+urltitle+"&rvlimit=500&format=xml"
+        pageid = page.attributes['pageid'].value
+        insert_page (cursor, pageid, title)
+        if (opts.debug): print(api_url+"?"+page_allrevs_query)
+        page_revs = urllib2.urlopen(api_url+"?"+page_allrevs_query)
+        page_revs_list = page_revs.read().strip('\n')
+        xmlrevs = parseString(page_revs_list)
+        process_revisions(cursor, pageid, xmlrevs)
+    return apcontinue
 
 if __name__ == '__main__':
     opts = None
@@ -147,40 +179,26 @@ if __name__ == '__main__':
     # Incremental support
     # last_date = get_last_date(opts.channel, cursor)
 
-    count_revs = count_pages = 0
+    count_pages = 0
 
     # http://openstack.redhat.com/api.php?action=query&list=allpages&aplimit=500
     api_url = opts.url + "/" + "api.php"
     if (opts.debug): print("API URL: " + api_url)
 
     # Read all WikiMedia pages and the analyze all revisions
-    allpages_query = "action=query&list=allpages&aplimit=500&format=xml"
-    pages = urllib2.urlopen(api_url+"?"+allpages_query)
-    pages_list = pages.read().strip('\n')
-    xmlpages = parseString(pages_list)
-    for page in xmlpages.getElementsByTagName('p'):
-        count_pages += 1
-        # TODO: we can join several title pages here
-        title = page.attributes['title'].value
-        urltitle = urllib.urlencode({'titles':title})
-        page_allrevs_query = "action=query&prop=revisions&"+urltitle+"&rvlimit=500&format=xml"
-        pageid = page.attributes['pageid'].value
-        insert_page (cursor, pageid, title)
-        if (opts.debug): print(api_url+"?"+page_allrevs_query)
-        page_revs = urllib2.urlopen(api_url+"?"+page_allrevs_query)
-        page_revs_list = page_revs.read().strip('\n')
-        xmlrevs = parseString(page_revs_list)
-        for rev in xmlrevs.getElementsByTagName('rev'):
-            count_revs += 1
-            revid = rev.attributes['revid'].value
-            user = rev.attributes['user'].value
-            timestamp = rev.attributes['timestamp'].value
-            comment = rev.attributes['comment'].value
-            if (opts.debug): print (pageid +" " + revid+" "+user+" "+timestamp+" "+comment)
-            insert_revision (cursor, pageid, revid, user, timestamp, comment)
-            if (count_revs % 1000 == 0): print (count_revs)
-        con.commit()
+    limit = "500"
+    allpages_query = "action=query&list=allpages&aplimit="+limit+"&format=xml"
+    if (opts.debug): print("Pages query: " + allpages_query)
+    apcontinue=''
+    while (apcontinue is not None):
+        pages = urllib2.urlopen(api_url+"?"+allpages_query+"&apcontinue="+apcontinue)
+        pages_list = pages.read().strip('\n')
+        xmlpages = parseString(pages_list)
+        apcontinue = process_pages(cursor, xmlpages)
+        count_pages += len(xmlpages.getElementsByTagName('p'))
+    con.commit()
+
     close_database(con)
-    print("Total revisions: %s" % (count_revs))
-    print("Total pagess: %s" % (count_pages))
+    # print("Total revisions: %s" % (count_revs))
+    print("Total pages: %s" % (count_pages))
     sys.exit(0)
