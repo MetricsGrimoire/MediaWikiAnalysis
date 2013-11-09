@@ -93,22 +93,6 @@ def get_last_date(cursor):
     cursor.execute(query)
     return cursor.fetchone()[0]
 
-def insert_page(cursor, pageid, title):
-    title = escape_string (title)
-    q = "INSERT INTO wiki_pages (page_id,title) ";
-    q += "VALUES ('" + pageid + "','" + title + "')"
-    cursor.execute(q)
-
-def insert_revision(cursor, pageid, revid, user, date, comment):
-    comment = escape_string (comment)
-    user = escape_string (user)
-    q = "INSERT INTO wiki_pages_revs (page_id,rev_id,date,user,comment) ";
-    q += "VALUES (";
-    q += "'" + pageid + "','" + revid + "','" + date + "','";
-    q +=  user + "','"+ comment +"')"
-    if (opts.debug): print(q)
-    cursor.execute(q)
-
 def create_tables(cursor, con):
     query = "CREATE TABLE IF NOT EXISTS wiki_pages_revs (" + \
            "id int(11) NOT NULL AUTO_INCREMENT," + \
@@ -135,7 +119,30 @@ def create_tables(cursor, con):
            ") ENGINE=MyISAM DEFAULT CHARSET=utf8"
     cursor.execute(query)
     return
-    
+
+def insert_page(cursor, pageid, title):
+    title = escape_string (title)
+    q = "INSERT INTO wiki_pages (page_id,title) ";
+    q += "VALUES ('" + pageid + "','" + title + "')"
+    try:
+        cursor.execute(q)
+    except:
+        print (pageid+" "+title+" was already in the db")
+
+def insert_revision(cursor, pageid, revid, user, date, comment):
+    comment = escape_string (comment)
+    user = escape_string (user)
+    # TODO: change format to sduenas proposal
+    q = "INSERT INTO wiki_pages_revs (page_id,rev_id,date,user,comment) ";
+    q += "VALUES (";
+    q += "'" + pageid + "','" + revid + "','" + date + "','";
+    q +=  user + "','"+ comment +"')"
+    if (opts.debug): print (q)
+    try:
+        cursor.execute(q)
+    except:
+        print (pageid+" "+revid+" "+ user +" was already in the db")
+
 def process_revisions(cursor, pageid, xmlrevs):
     for rev in xmlrevs.getElementsByTagName('rev'):
         # count_revs += 1
@@ -147,7 +154,7 @@ def process_revisions(cursor, pageid, xmlrevs):
         insert_revision (cursor, pageid, revid, user, timestamp, comment)
         # if (count_revs % 1000 == 0): print (count_revs)
 
-def process_pages(cursor, xmlpages):
+def process_pages(cursor, xmlpages, last_date):
     apcontinue = None
     for entry in xmlpages.getElementsByTagName('allpages'):
         if entry.hasAttribute('apcontinue'):
@@ -155,12 +162,15 @@ def process_pages(cursor, xmlpages):
             if (opts.debug): print("Continue from:"+apcontinue)
             break
     for page in xmlpages.getElementsByTagName('p'):
-        # TODO: we can join several title pages here
         title = page.attributes['title'].value
         urltitle = urllib.urlencode({'titles':title})
-        page_allrevs_query = "action=query&prop=revisions&"+urltitle+"&rvlimit=500&format=xml"
         pageid = page.attributes['pageid'].value
         insert_page (cursor, pageid, title)
+        page_allrevs_query = "action=query&prop=revisions&"+urltitle
+        # TODO: max limit is 500. We should iterate here
+        page_allrevs_query += "&rvlimit=max&format=xml"
+        if (last_date):
+            page_allrevs_query += "&rvstart="+last_date+"&rvdir=newer"
         if (opts.debug): print(api_url+"?"+page_allrevs_query)
         page_revs = urllib2.urlopen(api_url+"?"+page_allrevs_query)
         page_revs_list = page_revs.read().strip('\n')
@@ -177,8 +187,8 @@ if __name__ == '__main__':
     cursor = con.cursor()
     create_tables(cursor, con)
     # Incremental support
-    # last_date = get_last_date(opts.channel, cursor)
-
+    last_date = get_last_date(cursor).strftime('%Y-%m-%dT%H:%M:%SZ')
+    if (opts.debug): print ("Starting from: " + last_date)
     count_pages = 0
 
     # http://openstack.redhat.com/api.php?action=query&list=allpages&aplimit=500
@@ -194,7 +204,7 @@ if __name__ == '__main__':
         pages = urllib2.urlopen(api_url+"?"+allpages_query+"&apcontinue="+apcontinue)
         pages_list = pages.read().strip('\n')
         xmlpages = parseString(pages_list)
-        apcontinue = process_pages(cursor, xmlpages)
+        apcontinue = process_pages(cursor, xmlpages, last_date)
         count_pages += len(xmlpages.getElementsByTagName('p'))
     con.commit()
 
