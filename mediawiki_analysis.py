@@ -25,7 +25,7 @@
 #
 
 from optparse import OptionParser
-import sys
+import sys, traceback
 import MySQLdb
 import urllib2, urllib
 from xml.dom.minidom import parseString
@@ -120,51 +120,53 @@ def create_tables(cursor, con):
     cursor.execute(query)
     return
 
+
 def insert_page(cursor, pageid, title):
-    title = escape_string (title)
     q = "INSERT INTO wiki_pages (page_id,title) ";
-    q += "VALUES ('" + pageid + "','" + title + "')"
+    q += "VALUES (%s, %s)"
     try:
-        cursor.execute(q)
+        cursor.execute(q, (pageid, title))
     except:
         print (pageid+" "+title+" was already in the db")
 
 def insert_revision(cursor, pageid, revid, user, date, comment):
-    comment = escape_string (comment)
-    user = escape_string (user)
-    # TODO: change format to sduenas proposal
     q = "INSERT INTO wiki_pages_revs (page_id,rev_id,date,user,comment) ";
-    q += "VALUES (";
-    q += "'" + pageid + "','" + revid + "','" + date + "','";
-    q +=  user + "','"+ comment +"')"
+    q += "VALUES (%s, %s, %s, %s, %s)"
     if (opts.debug): print (q)
     try:
-        cursor.execute(q)
+        cursor.execute(q, (pageid,revid,date,user,comment))
     except:
         print (pageid+" "+revid+" "+ user +" was already in the db")
 
 def process_revisions(cursor, pageid, xmlrevs):
     for rev in xmlrevs.getElementsByTagName('rev'):
         # count_revs += 1
-        revid = rev.attributes['revid'].value
-        user = rev.attributes['user'].value
-        timestamp = rev.attributes['timestamp'].value
-        comment = rev.attributes['comment'].value
-        if (opts.debug): print (pageid +" " + revid+" "+user+" "+timestamp+" "+comment)
-        insert_revision (cursor, pageid, revid, user, timestamp, comment)
+        try:
+            revid = rev.attributes['revid'].value
+            timestamp = rev.attributes['timestamp'].value
+            comment = rev.attributes['comment'].value
+            if rev.hasAttribute('user'):
+                user = rev.attributes['user'].value
+            else: user = rev.attributes['userhidden'].value
+            if (opts.debug): print (pageid +" " + revid+" "+user+" "+timestamp+" "+comment)
+            insert_revision (cursor, pageid, revid, user, timestamp, comment)
+        except:
+            print rev.attributes.items()
+            print ("ERROR. Revision data wrong " +revid)
+            traceback.print_exc(file=sys.stdout)
         # if (count_revs % 1000 == 0): print (count_revs)
 
 def process_pages(cursor, xmlpages, last_date):
     apcontinue = None
     for entry in xmlpages.getElementsByTagName('allpages'):
         if entry.hasAttribute('apcontinue'):
-            apcontinue = entry.attributes['apcontinue'].value
+            apcontinue = entry.attributes['apcontinue'].value.encode('utf-8')
             if (opts.debug): print("Continue from:"+apcontinue)
             break
     for page in xmlpages.getElementsByTagName('p'):
-        title = page.attributes['title'].value
+        title = page.attributes['title'].value.encode('utf-8')
         urltitle = urllib.urlencode({'titles':title})
-        pageid = page.attributes['pageid'].value
+        pageid = page.attributes['pageid'].value        
         insert_page (cursor, pageid, title)
         page_allrevs_query = "action=query&prop=revisions&"+urltitle
         # TODO: max limit is 500. We should iterate here
@@ -187,8 +189,10 @@ if __name__ == '__main__':
     cursor = con.cursor()
     create_tables(cursor, con)
     # Incremental support
-    last_date = get_last_date(cursor).strftime('%Y-%m-%dT%H:%M:%SZ')
-    if (opts.debug): print ("Starting from: " + last_date)
+    last_date = get_last_date(cursor)
+    if (last_date): 
+        last_date = get_last_date(cursor).strftime('%Y-%m-%dT%H:%M:%SZ')
+        if (opts.debug): print ("Starting from: " + last_date)
     count_pages = 0
 
     # http://openstack.redhat.com/api.php?action=query&list=allpages&aplimit=500
@@ -196,7 +200,8 @@ if __name__ == '__main__':
     if (opts.debug): print("API URL: " + api_url)
 
     # Read all WikiMedia pages and the analyze all revisions
-    limit = "500"
+    # limit = "500"
+    limit = "max"
     allpages_query = "action=query&list=allpages&aplimit="+limit+"&format=xml"
     if (opts.debug): print("Pages query: " + allpages_query)
     apcontinue=''
