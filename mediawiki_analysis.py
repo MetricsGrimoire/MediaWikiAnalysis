@@ -141,7 +141,7 @@ def process_revision_by_id(cursor, revid):
     api_url = opts.url + "/" + "api.php"
     allchanges_query = "action=query&prop=revisions&revids="+revid+"&format=xml"
     rev_query = api_url + "?" + allchanges_query
-    if (opts.debug): print("Rev query: " + rev_query)
+    # if (opts.debug): print("Rev query: " + rev_query)
     revision = urllib2.urlopen(rev_query)
     revision_data = revision.read().strip('\n')
     xmlrevision = parseString(revision_data)
@@ -162,7 +162,7 @@ def process_revisions(cursor, pageid, xmlrevs):
             if rev.hasAttribute('user'):
                 user = rev.attributes['user'].value
             else: user = rev.attributes['userhidden'].value
-            if (opts.debug): print (pageid +" " + revid+" "+user+" "+timestamp+" "+comment)
+            # if (opts.debug): print (pageid +" " + revid+" "+user+" "+timestamp+" "+comment)
             insert_revision (cursor, pageid, revid, user, timestamp, comment)
         except:
             print rev.attributes.items()
@@ -205,7 +205,7 @@ def process_changes(cursor, xmlchanges):
     for entry in xmlchanges.getElementsByTagName('recentchanges'):
         if entry.hasAttribute('rccontinue'):
             rccontinue = entry.attributes['rccontinue'].value.encode('utf-8')
-            if (opts.debug): print("Continue changes from:"+rccontinue)
+            #  if (opts.debug): print("Continue changes from:"+rccontinue)
             break
     for change in xmlchanges.getElementsByTagName('rc'):
         revtype = change.attributes['type'].value.encode('utf-8')

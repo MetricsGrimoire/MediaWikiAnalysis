@@ -35,27 +35,34 @@ class Config:
 
 class MediaWikiTest(unittest.TestCase):
     
+    # Changes API not tested because it needs URL API omline
     def testZAll(self):
         # look test/data/README
         total_pages = 17
-        total_reviews = 23
-        total_changes = 47
+        total_revisions = 47
+        pageid_reviews = "1428"
+        # total_changes = 23
         cursor = MediaWikiTest.db.cursor()
         pages = open(os.path.join(MediaWikiTest.tests_data_dir, "pages.xml"))
-        reviews = open(os.path.join(MediaWikiTest.tests_data_dir, "revisions.xml"))
-        changes = open (os.path.join(MediaWikiTest.tests_data_dir, "changes.xml"))
+        revisions = open(os.path.join(MediaWikiTest.tests_data_dir, "revisions.xml"))
+        # changes = open (os.path.join(MediaWikiTest.tests_data_dir, "changes.xml"))
         mediawiki_analysis.process_pages(cursor, parseString(pages.read()), None, False)
-        # print (reviews.read())
-        # print (changes.read())
+        mediawiki_analysis.process_revisions(cursor, pageid_reviews, parseString(revisions.read()))
+        pages.close()
+        revisions.close()
         MediaWikiTest.db.commit()
         sql = "SELECT COUNT(*) FROM wiki_pages"
         cursor.execute(sql)
         self.assertEqual(cursor.fetchall()[0][0], total_pages)
-        sys.exit(0)
         sql = "SELECT COUNT(*) FROM wiki_pages_revs"
         cursor.execute(sql)
-        self.assertEqual(cursor.fetchall()[0][0], total_reviews)
-
+        self.assertEqual(cursor.fetchall()[0][0], total_revisions)
+        # mediawiki_analysis.process_changes(cursor, parseString(changes.read()))
+        # changes.close()
+        # sql = "SELECT COUNT(*) FROM wiki_pages_revs"
+        # cursor.execute(sql)
+        # self.assertEqual(cursor.fetchall()[0][0], total_revisions+total_changes)
+        
     def setUp(self):
         pass
 
