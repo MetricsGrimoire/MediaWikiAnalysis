@@ -41,10 +41,8 @@ def open_database(myuser, mypassword, mydb):
     # return cursor
     return con
 
-
 def close_database(con):
     con.close()
-
 
 def read_options():
     parser = OptionParser(usage="usage: %prog [options]",
@@ -132,11 +130,27 @@ def insert_page(cursor, pageid, title):
 def insert_revision(cursor, pageid, revid, user, date, comment):
     q = "INSERT INTO wiki_pages_revs (page_id,rev_id,date,user,comment) ";
     q += "VALUES (%s, %s, %s, %s, %s)"
-    if (opts.debug): print (q)
     try:
         cursor.execute(q, (pageid,revid,date,user,comment))
     except:
         print (pageid+" "+revid+" "+ user +" was already in the db")
+
+def process_revision_by_id(cursor, revid):
+    # Get revision info
+    # http://mediawiki.org/w/api.php?action=query&prop=revisions&revids=1
+    api_url = opts.url + "/" + "api.php"
+    allchanges_query = "action=query&prop=revisions&revids="+revid+"&format=xml"
+    rev_query = api_url + "?" + allchanges_query
+    if (opts.debug): print("Rev query: " + rev_query)
+    revision = urllib2.urlopen(rev_query)
+    revision_data = revision.read().strip('\n')
+    xmlrevision = parseString(revision_data)
+    revision_node = xmlrevision.getElementsByTagName('rev')[0]
+    pageid = xmlrevision.getElementsByTagName('page')[0].attributes['pageid'].value
+    user = revision_node.attributes['user'].value
+    comment = revision_node.attributes['comment'].value
+    date = revision_node.attributes['timestamp'].value
+    insert_revision(cursor, pageid, revid, user, date, comment)
 
 def process_revisions(cursor, pageid, xmlrevs):
     for rev in xmlrevs.getElementsByTagName('rev'):
@@ -158,6 +172,8 @@ def process_revisions(cursor, pageid, xmlrevs):
 
 def process_pages(cursor, xmlpages, last_date):
     apcontinue = None
+    api_url = opts.url + "/" + "api.php"
+
     for entry in xmlpages.getElementsByTagName('allpages'):
         if entry.hasAttribute('apcontinue'):
             apcontinue = entry.attributes['apcontinue'].value.encode('utf-8')
@@ -180,19 +196,45 @@ def process_pages(cursor, xmlpages, last_date):
         process_revisions(cursor, pageid, xmlrevs)
     return apcontinue
 
-if __name__ == '__main__':
-    opts = None
-    opts = read_options()
+def process_changes(cursor, xmlchanges):
+    rccontinue = None
+    for entry in xmlchanges.getElementsByTagName('recentchanges'):
+        if entry.hasAttribute('rccontinue'):
+            rccontinue = entry.attributes['rccontinue'].value.encode('utf-8')
+            if (opts.debug): print("Continue changes from:"+rccontinue)
+            break
+    for change in xmlchanges.getElementsByTagName('rc'):
+        revtype = change.attributes['type'].value.encode('utf-8')
+        # only analyzing editions
+        if (revtype != "edit"): continue
+        # page info
+        title = change.attributes['title'].value.encode('utf-8')
+        pageid = change.attributes['pageid'].value.encode('utf-8')
+        insert_page(cursor, pageid, title)
+        revid = change.attributes['revid'].value.encode('utf-8')
+        # TODO: we can get several revisions at the same time
+        process_revision_by_id(cursor, revid)
+        # insert_change (cursor, changeid, title)
+    return rccontinue
 
-    # Persistance Layer
-    con = open_database(opts.dbuser, opts.dbpassword, opts.dbname)
-    cursor = con.cursor()
-    create_tables(cursor, con)
-    # Incremental support
-    last_date = get_last_date(cursor)
-    if (last_date): 
-        last_date = get_last_date(cursor).strftime('%Y-%m-%dT%H:%M:%SZ')
-        if (opts.debug): print ("Starting from: " + last_date)
+def process_changes_all(cursor, last_date):
+    # http://www.mediawiki.org/w/api.php?action=query&list=recentchanges&rclimit=max&rcend=2013-11-09T05:51:59Z
+    api_url = opts.url + "/" + "api.php"
+    limit = "max"
+    allchanges_query = "action=query&list=recentchanges&rclimit="+limit+"&rcend="+last_date+"&format=xml"
+    url_query = api_url + "?" + allchanges_query
+    rccontinue = ''
+    while (rccontinue is not None):
+        url_changes = url_query
+        if (rccontinue != ''): url_changes += "&rccontinue="+rccontinue
+        if (opts.debug): print("Changes query: " + url_changes)
+        changes = urllib2.urlopen(url_changes)
+        changes_list = changes.read().strip('\n')
+        print(changes_list)
+        xmlchanges = parseString(changes_list)
+        rccontinue = process_changes(cursor, xmlchanges)
+
+def process_all(cursor):
     count_pages = 0
 
     # http://openstack.redhat.com/api.php?action=query&list=allpages&aplimit=500
@@ -213,7 +255,25 @@ if __name__ == '__main__':
         count_pages += len(xmlpages.getElementsByTagName('p'))
     con.commit()
 
-    close_database(con)
     # print("Total revisions: %s" % (count_revs))
     print("Total pages: %s" % (count_pages))
+
+
+if __name__ == '__main__':
+    opts = None
+    opts = read_options()
+
+    con = open_database(opts.dbuser, opts.dbpassword, opts.dbname)
+    cursor = con.cursor()
+    create_tables(cursor, con)
+    # Incremental support
+    last_date = get_last_date(cursor)
+    if (last_date):
+        last_date = last_date.strftime('%Y-%m-%dT%H:%M:%SZ')
+        if (opts.debug): print ("Starting from: " + last_date)
+        # We use a different API for getting changes: incremental mode
+        process_changes_all(cursor, last_date)
+    else: process_all(cursor)
+
+    close_database(con)
     sys.exit(0)
