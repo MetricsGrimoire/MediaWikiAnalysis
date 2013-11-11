@@ -22,56 +22,42 @@
 # Authors:
 #   Alvaro del Castillo San Felix <acs@bitergia.com>
 #
+# To run: PYTHONPATH=. test/test_mediawiki.py 
+#
+
 import MySQLdb, os, random, string, sys, unittest
 import mediawiki_analysis
+from xml.dom.minidom import parseString
+
 
 class Config:
     pass
 
 class MediaWikiTest(unittest.TestCase):
-
-    def testZAll(self):
-        channel_id = "1"
-        total_messages = 5552
-        cursor = MediaWikiTest.db.cursor()
-        files = os.listdir(MediaWikiTest.tests_data_dir)
-        for logfile in files:
-            year = logfile[0:4]
-            month = logfile[4:6]
-            day = logfile[6:8]    
-            date = year + "-" + month + "-" + day
-            date_nick_msg = mediawiki_analysis.parse_file(os.path.join(MediaWikiTest.tests_data_dir, logfile))
     
-            for i in date_nick_msg:
-                mediawiki_analysis.insert_message (cursor, date + " " + i[0], i[1], i[2], channel_id)                
-            MediaWikiTest.db.commit()
-        sql = "SELECT COUNT(*) FROM mediawikilog"
-        cursor.execute(sql)
-        self.assertEqual(cursor.fetchall()[0][0], total_messages)
-        
-    def testReadFile(self):
-        filename = "20130715.txt"
-        date_nick_msg = mediawiki_analysis.parse_file(os.path.join(MediaWikiTest.tests_data_dir, filename))
-        self.assertEqual(len(date_nick_msg), 224)
-        
-    def testWriteDb(self):
-        channel_id = "1"
-        filename = "20130715.txt"
-        date = "2013-07-15"
-        date_nick_msg = mediawiki_analysis.parse_file(os.path.join(MediaWikiTest.tests_data_dir, filename))
+    def testZAll(self):
+        # look test/data/README
+        total_pages = 17
+        total_reviews = 23
+        total_changes = 47
         cursor = MediaWikiTest.db.cursor()
-
-        for i in date_nick_msg:
-            mediawiki_analysis.insert_message (cursor, date + " " + i[0], i[1], i[2], channel_id) 
+        pages = open(os.path.join(MediaWikiTest.tests_data_dir, "pages.xml"))
+        reviews = open(os.path.join(MediaWikiTest.tests_data_dir, "revisions.xml"))
+        changes = open (os.path.join(MediaWikiTest.tests_data_dir, "changes.xml"))
+        mediawiki_analysis.process_pages(cursor, parseString(pages.read()), None, False)
+        # print (reviews.read())
+        # print (changes.read())
         MediaWikiTest.db.commit()
-        
-        sql = "SELECT COUNT(*) FROM mediawikilog"
+        sql = "SELECT COUNT(*) FROM wiki_pages"
         cursor.execute(sql)
-        self.assertEqual(cursor.fetchall()[0][0], 224)
-        
+        self.assertEqual(cursor.fetchall()[0][0], total_pages)
+        sys.exit(0)
+        sql = "SELECT COUNT(*) FROM wiki_pages_revs"
+        cursor.execute(sql)
+        self.assertEqual(cursor.fetchall()[0][0], total_reviews)
+
     def setUp(self):
-        cursor = MediaWikiTest.db.cursor()
-        cursor.execute("DELETE from mediawikilog")
+        pass
 
     @staticmethod
     def setUpDB():
@@ -82,24 +68,26 @@ class MediaWikiTest(unittest.TestCase):
         Config.db_port_out = ""
         random_str = ''.join(random.choice(string.ascii_uppercase + string.digits) for x in range(5))
         Config.db_database_out = "mediawikilogdb"+random_str
-        
         MediaWikiTest.db = MySQLdb.connect(user=Config.db_user_out, passwd=Config.db_password_out)
         c = MediaWikiTest.db.cursor()
         sql = "CREATE DATABASE "+ Config.db_database_out +" CHARACTER SET utf8 COLLATE utf8_unicode_ci"
         c.execute(sql)
         MediaWikiTest.db.close()
         MediaWikiTest.db = MySQLdb.connect(user=Config.db_user_out, passwd=Config.db_password_out, db=Config.db_database_out)
+        cursor = MediaWikiTest.db.cursor()
+        mediawiki_analysis.create_tables(cursor)
+
 
     @staticmethod                
     def setUpBackend():
-        MediaWikiTest.tests_data_dir = os.path.join('test','data')        
+        MediaWikiTest.tests_data_dir = os.path.join('test','data')
         
         if not os.path.isdir (MediaWikiTest.tests_data_dir):
             print('Can not find test data in ' + MediaWikiTest.tests_data_dir)
             sys.exit(1)
-            
+
         MediaWikiTest.setUpDB()
-        
+
         cursor = MediaWikiTest.db.cursor()
         mediawiki_analysis.create_tables(cursor, MediaWikiTest.db)
 

@@ -1,0 +1,5 @@
+Test data gathered with:
+
+wget "http://mediawiki.org/w/api.php?action=query&list=allpages&aplimit=17&format=xml" -O pages.xml
+wget "http://www.mediawiki.org/w/api.php?action=query&list=recentchanges&rclimit=max&rcend=2013-11-08T02:34:48Z&rclimit=23&format=xml" -O changes.xml
+wget "http://www.mediawiki.org/w/api.php?action=query&prop=revisions&titles=Project:Sandbox&rvlimit=47&format=xml&rvdir=newer" -O revisions.xml

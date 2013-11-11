@@ -91,7 +91,7 @@ def get_last_date(cursor):
     cursor.execute(query)
     return cursor.fetchone()[0]
 
-def create_tables(cursor, con):
+def create_tables(cursor, con = None):
     query = "CREATE TABLE IF NOT EXISTS wiki_pages_revs (" + \
            "id int(11) NOT NULL AUTO_INCREMENT," + \
            "rev_id int," + \
@@ -170,30 +170,34 @@ def process_revisions(cursor, pageid, xmlrevs):
             traceback.print_exc(file=sys.stdout)
         # if (count_revs % 1000 == 0): print (count_revs)
 
-def process_pages(cursor, xmlpages, last_date):
-    apcontinue = None
+def process_page_revisions(cursor, pageid, urltitle, last_date):
     api_url = opts.url + "/" + "api.php"
 
+    page_allrevs_query = "action=query&prop=revisions&"+urltitle
+    # TODO: max limit is 500. We should iterate here
+    page_allrevs_query += "&rvlimit=max&format=xml"
+    if (last_date):
+        page_allrevs_query += "&rvstart="+last_date+"&rvdir=newer"
+    if (opts.debug): print(api_url+"?"+page_allrevs_query)
+    page_revs = urllib2.urlopen(api_url+"?"+page_allrevs_query)
+    page_revs_list = page_revs.read().strip('\n')
+    xmlrevs = parseString(page_revs_list)
+    process_revisions(cursor, pageid, xmlrevs)
+
+def process_pages(cursor, xmlpages, last_date, revisions = True):
+    apcontinue = None
     for entry in xmlpages.getElementsByTagName('allpages'):
         if entry.hasAttribute('apcontinue'):
             apcontinue = entry.attributes['apcontinue'].value.encode('utf-8')
-            if (opts.debug): print("Continue from:"+apcontinue)
+            # if (opts.debug): print("Continue from:"+apcontinue)
             break
     for page in xmlpages.getElementsByTagName('p'):
         title = page.attributes['title'].value.encode('utf-8')
         urltitle = urllib.urlencode({'titles':title})
         pageid = page.attributes['pageid'].value        
         insert_page (cursor, pageid, title)
-        page_allrevs_query = "action=query&prop=revisions&"+urltitle
-        # TODO: max limit is 500. We should iterate here
-        page_allrevs_query += "&rvlimit=max&format=xml"
-        if (last_date):
-            page_allrevs_query += "&rvstart="+last_date+"&rvdir=newer"
-        if (opts.debug): print(api_url+"?"+page_allrevs_query)
-        page_revs = urllib2.urlopen(api_url+"?"+page_allrevs_query)
-        page_revs_list = page_revs.read().strip('\n')
-        xmlrevs = parseString(page_revs_list)
-        process_revisions(cursor, pageid, xmlrevs)
+        if (revisions):
+            process_page_revisions(cursor, pageid, urltitle, last_date)
     return apcontinue
 
 def process_changes(cursor, xmlchanges):
@@ -265,7 +269,7 @@ if __name__ == '__main__':
 
     con = open_database(opts.dbuser, opts.dbpassword, opts.dbname)
     cursor = con.cursor()
-    create_tables(cursor, con)
+    create_tables(cursor)
     # Incremental support
     last_date = get_last_date(cursor)
     if (last_date):
