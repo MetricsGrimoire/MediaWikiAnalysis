@@ -105,6 +105,7 @@ def create_tables(cursor, con = None):
 
     query = "CREATE TABLE IF NOT EXISTS wiki_pages (" + \
            "page_id int(11)," + \
+           "namespace smallint," + \
            "title VARCHAR(255) NOT NULL," + \
            "PRIMARY KEY (page_id)" + \
            ") ENGINE=MyISAM DEFAULT CHARSET=utf8"
@@ -119,13 +120,13 @@ def create_tables(cursor, con = None):
     return
 
 
-def insert_page(cursor, pageid, title):
-    q = "INSERT INTO wiki_pages (page_id,title) ";
-    q += "VALUES (%s, %s)"
+def insert_page(cursor, pageid, namespace, title):
+    q = "INSERT INTO wiki_pages (page_id, namespace, title) ";
+    q += "VALUES (%s, %s, %s)"
     try:
-        cursor.execute(q, (pageid, title))
+        cursor.execute(q, (pageid, namespace, title))
     except:
-        print (pageid+" "+title+" was already in the db")
+        print (pageid+" "+ namespace + " " + title+" was already in the db")
 
 def insert_revision(cursor, pageid, revid, user, date, comment):
     q = "INSERT INTO wiki_pages_revs (page_id,rev_id,date,user,comment) ";
@@ -194,8 +195,9 @@ def process_pages(cursor, xmlpages, last_date, revisions = True):
     for page in xmlpages.getElementsByTagName('p'):
         title = page.attributes['title'].value.encode('utf-8')
         urltitle = urllib.urlencode({'titles':title})
-        pageid = page.attributes['pageid'].value        
-        insert_page (cursor, pageid, title)
+        pageid = page.attributes['pageid'].value
+        namespace = page.attributes['ns'].value
+        insert_page (cursor, pageid, namespace, title)
         if (revisions):
             process_page_revisions(cursor, pageid, urltitle, last_date)
     return apcontinue
@@ -214,18 +216,21 @@ def process_changes(cursor, xmlchanges):
         # page info
         title = change.attributes['title'].value.encode('utf-8')
         pageid = change.attributes['pageid'].value.encode('utf-8')
-        insert_page(cursor, pageid, title)
+        namespace = change.attributes['ns'].value.encode('utf-8')
+        insert_page(cursor, pageid, namespace, title)
         revid = change.attributes['revid'].value.encode('utf-8')
         # TODO: we can get several revisions at the same time
         process_revision_by_id(cursor, revid)
-        # insert_change (cursor, changeid, title)
     return rccontinue
 
 def process_changes_all(cursor, last_date):
     # http://www.mediawiki.org/w/api.php?action=query&list=recentchanges&rclimit=max&rcend=2013-11-09T05:51:59Z
     api_url = opts.url + "/" + "api.php"
     limit = "max"
-    allchanges_query = "action=query&list=recentchanges&rclimit="+limit+"&rcend="+last_date+"&format=xml"
+    namespaces = '|'.join(get_content_namespaces())
+    allchanges_query = "action=query&list=recentchanges&rclimit="+limit+"&rcend="+last_date
+    allchanges_query += "&rcnamespace=" + namespaces
+    allchanges_query += "&format=xml"
     url_query = api_url + "?" + allchanges_query
     rccontinue = ''
     while (rccontinue is not None):
@@ -238,17 +243,15 @@ def process_changes_all(cursor, last_date):
         xmlchanges = parseString(changes_list)
         rccontinue = process_changes(cursor, xmlchanges)
 
-def process_all(cursor):
+def process_all_namespace(cursor, namespace):
     count_pages = 0
-
     # http://openstack.redhat.com/api.php?action=query&list=allpages&aplimit=500
     api_url = opts.url + "/" + "api.php"
-    if (opts.debug): print("API URL: " + api_url)
-
     # Read all WikiMedia pages and the analyze all revisions
     # limit = "500"
     limit = "max"
-    allpages_query = "action=query&list=allpages&aplimit="+limit+"&format=xml"
+    allpages_query = "action=query&list=allpages&aplimit="+limit+"&apnamespace="+namespace
+    allpages_query += "&format=xml"
     if (opts.debug): print("Pages query: " + allpages_query)
     apcontinue=''
     while (apcontinue is not None):
@@ -260,8 +263,29 @@ def process_all(cursor):
     con.commit()
 
     # print("Total revisions: %s" % (count_revs))
-    print("Total pages: %s" % (count_pages))
+    print("Total ns %s pages: %s"  % (namespace, count_pages))
 
+def get_content_namespaces():
+    # Get all contents namespaces
+    namespaces = []
+    api_url = opts.url + "/" + "api.php"
+    if (opts.debug): print("API URL: " + api_url)
+
+    ns_query = "action=query&meta=siteinfo&siprop=namespaces"
+    ns_query += "&format=xml"
+    if (opts.debug): print("Namespaces query: " + ns_query)
+    pages = urllib2.urlopen(api_url+"?"+ns_query)
+    ns_list = pages.read().strip('\n')
+    xmlns = parseString(ns_list)
+    for entry in xmlns.getElementsByTagName('ns'):
+        if entry.hasAttribute('content'):
+            namespaces.append(entry.attributes['id'].value)
+    return namespaces
+
+def process_all(cursor):
+    namespaces = get_content_namespaces()
+    for ns in namespaces:
+        process_all_namespace(cursor, ns)
 
 if __name__ == '__main__':
     opts = None
