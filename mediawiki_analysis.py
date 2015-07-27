@@ -24,6 +24,7 @@
 #   Alvaro del Castillo San Felix <acs@bitergia.com>
 #
 
+import logging
 from optparse import OptionParser
 import sys, traceback
 import MySQLdb
@@ -70,6 +71,11 @@ def read_options():
                       dest="debug",
                       default=False,
                       help="Debug mode")
+    parser.add_option("-b", "--backend",
+                      action="store",
+                      dest="backend",
+                      default="mediawiki",
+                      help="mediawiki or dokuwiki backend")
     (opts, args) = parser.parse_args()
     # print(opts)
     if len(args) != 0:
@@ -287,7 +293,13 @@ def process_all(cursor):
     for ns in namespaces:
         process_all_namespace(cursor, ns)
 
+def process_dokuwiki():
+    logging.info("Gathering data from dokuwiki")
+    pass
+
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO,format='%(asctime)s %(message)s')
+
     opts = None
     opts = read_options()
 
@@ -296,12 +308,18 @@ if __name__ == '__main__':
     create_tables(cursor)
     # Incremental support
     last_date = get_last_date(cursor)
-    if (last_date):
-        last_date = last_date.strftime('%Y-%m-%dT%H:%M:%SZ')
-        if (opts.debug): print ("Starting from: " + last_date)
-        # We use a different API for getting changes: incremental mode
-        process_changes_all(cursor, last_date)
-    else: process_all(cursor)
+
+    if opts.backend == "mediawiki":
+        if (last_date):
+            last_date = last_date.strftime('%Y-%m-%dT%H:%M:%SZ')
+            if (opts.debug): print ("Starting from: " + last_date)
+            # We use a different API for getting changes: incremental mode
+            process_changes_all(cursor, last_date)
+        else: process_all(cursor)
+    elif opts.backend == "dokuwiki":
+        process_dokuwiki()
+    else:
+        raise("Backend not supported " + opts.backend)
 
     close_database(con)
     sys.exit(0)
