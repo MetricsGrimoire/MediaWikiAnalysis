@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 #
-# 
+#
 # Copyright (C) 2012-2013 Bitergia
 #
 # This program is free software; you can redistribute it and/or modify
@@ -29,7 +29,7 @@ setup(name = "MediaWiki Analysis",
       author =  "Bitergia",
       author_email = "acs@bitergia.com",
       description = "Analysis tool for MediaWiki websites",
-      url = "https://github.com/MetricsGrimoire/MediaWikiAnalysis",      
-      packages = [],
+      url = "https://github.com/MetricsGrimoire/MediaWikiAnalysis",
+      packages = ["wikianalysis", "wikianalysis.db"],
       data_files = [],
-      scripts = ["mediawiki_analysis.py"])
+      scripts = ["mediawiki_analysis.py", "confluence_analysis.py"])
