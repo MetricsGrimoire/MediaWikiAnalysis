@@ -94,12 +94,12 @@ class WikiPageRevision(UniqueObject, Base):
     comment = Column(Text())
     date = Column(DateTime(timezone=False))
 
-    name = Column(String(64),
+    user = Column(String(64),
                   ForeignKey('people.username', ondelete='CASCADE'),)
     page_id = Column(Integer,
                      ForeignKey('wiki_pages.id', ondelete='CASCADE'),)
 
-    author = relationship('Member', foreign_keys=[name])
+    author = relationship('Member', foreign_keys=[user])
     wikipage = relationship('WikiPage', foreign_keys=[page_id])
 
     __table_args__ = {'mysql_charset': 'utf8'}
