@@ -62,7 +62,7 @@ def _unique(session, cls, queryfunc, constructor, arg, kw):
 class WikiPage(UniqueObject, Base):
     __tablename__ = 'wiki_pages'
 
-    id = Column(Integer, primary_key=True)
+    page_id = Column(Integer, primary_key=True)
     wikipage_id = Column(String(64))
     type = Column(String(64))
     title = Column(String(256))
@@ -97,7 +97,7 @@ class WikiPageRevision(UniqueObject, Base):
     user = Column(String(64),
                   ForeignKey('people.username', ondelete='CASCADE'),)
     page_id = Column(Integer,
-                     ForeignKey('wiki_pages.id', ondelete='CASCADE'),)
+                     ForeignKey('wiki_pages.page_id', ondelete='CASCADE'),)
 
     author = relationship('Member', foreign_keys=[user])
     wikipage = relationship('WikiPage', foreign_keys=[page_id])
