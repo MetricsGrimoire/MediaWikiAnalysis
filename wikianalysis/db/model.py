@@ -68,8 +68,8 @@ class WikiPage(UniqueObject, Base):
     title = Column(String(256))
     namespace = Column(String(64))
 
-    created_by = Column(Integer,
-                        ForeignKey('people.id', ondelete='CASCADE'),)
+    created_by = Column(String(64),
+                        ForeignKey('people.username', ondelete='CASCADE'),)
     created_on = Column(DateTime(timezone=False))
     updated_at  = Column(DateTime(timezone=False))
 
@@ -77,6 +77,8 @@ class WikiPage(UniqueObject, Base):
 
     revisions = relationship('WikiPageRevision',
                              cascade="save-update, merge, delete")
+
+    __table_args__ = {'mysql_charset': 'utf8'}
 
     @classmethod
     def unique_filter(cls, query, wikipage_id):
@@ -92,13 +94,15 @@ class WikiPageRevision(UniqueObject, Base):
     comment = Column(Text())
     date = Column(DateTime(timezone=False))
 
-    created_by = Column(Integer,
-                        ForeignKey('people.id', ondelete='CASCADE'),)
+    name = Column(String(64),
+                  ForeignKey('people.username', ondelete='CASCADE'),)
     page_id = Column(Integer,
                      ForeignKey('wiki_pages.id', ondelete='CASCADE'),)
 
-    author = relationship('Member', foreign_keys=[created_by])
+    author = relationship('Member', foreign_keys=[name])
     wikipage = relationship('WikiPage', foreign_keys=[page_id])
+
+    __table_args__ = {'mysql_charset': 'utf8'}
 
     @classmethod
     def unique_filter(cls, query, wikipage_id, rev_id):
@@ -109,13 +113,10 @@ class WikiPageRevision(UniqueObject, Base):
 class Member(UniqueObject, Base):
     __tablename__ = 'people'
 
-    id = Column(Integer, primary_key=True)
+    username = Column(String(64), primary_key=True)
     name = Column(String(256))
-    username = Column(String(64))
 
-    __table_args__ = (UniqueConstraint('username',
-                                       name='_member_unique'),
-                      {'mysql_charset': 'utf8'})
+    __table_args__ = {'mysql_charset': 'utf8'}
 
     @classmethod
     def unique_filter(cls, query, username):
