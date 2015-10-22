@@ -201,7 +201,7 @@ class Confluence(object):
         page = WikiPage.as_unique(self.session,
                                   wikipage_id=wikipage_id)
 
-        if not page.id:
+        if not page.page_id:
             member = self.__parse_member(raw_page['history']['createdBy'])
             page.author = member
             page.type = raw_page['type']
