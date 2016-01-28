@@ -32,4 +32,5 @@ setup(name = "MediaWiki Analysis",
       url = "https://github.com/MetricsGrimoire/MediaWikiAnalysis",
       packages = ["wikianalysis", "wikianalysis.db"],
       data_files = [],
-      scripts = ["mediawiki_analysis.py", "confluence_analysis.py"])
+      scripts = ["mediawiki_analysis.py", "confluence_analysis.py"],
+      install_requires=["MySQL-python"])
